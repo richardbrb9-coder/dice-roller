@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Roll-a-Roo Dice</title>
+<meta name="description" content="A kid-friendly dice roller: number dice, a letter die and a Win/Lose/Draw die. Works offline.">
+<meta name="theme-color" content="#2f6fde">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Dice">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Nunito:wght@600;800&display=swap">
+<style>
+/* Layout: one-screen toy. Header, a "play mat" where the dice land, die pickers, then a giant Roll button pinned to the thumb zone. */
+:root {
+  --sky: #dcecff;          /* page */
+  --mat: #ffffff;          /* play mat */
+  --ink: #1d2a4d;          /* text */
+  --ink-soft: #55628a;
+  --line: #b9cdf0;
+  --go: #2f6fde;           /* roll button */
+  --go-deep: #1f4fa8;
+  --red: #ef4b4b;   --red-deep: #b72f35;
+  --blue: #3d8bfd;  --blue-deep: #2560c4;
+  --sun: #ffc93c;   --sun-deep: #d99a13;
+  --leaf: #31b56a;  --leaf-deep: #1f8549;
+  --grape: #9b5de5; --grape-deep: #6e3bb5;
+  --pip: #ffffff;
+  --die-ink: #1d2a4d;
+  --shadow: rgba(29, 42, 77, .18);
+  --font-display: "Baloo 2", "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Nunito", "Segoe UI", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --sky: #111a33; --mat: #1b2647; --ink: #eef3ff; --ink-soft: #a8b5da; --line: #2e3d6b;
+    --go: #4b8bff; --go-deep: #2c5fc4; --shadow: rgba(0, 0, 0, .45); --die-ink: #1d2a4d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --sky: #111a33; --mat: #1b2647; --ink: #eef3ff; --ink-soft: #a8b5da; --line: #2e3d6b;
+  --go: #4b8bff; --go-deep: #2c5fc4; --shadow: rgba(0, 0, 0, .45); --die-ink: #1d2a4d;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--sky);
+  background-image: radial-gradient(var(--line) 1.5px, transparent 1.6px);
+  background-size: 22px 22px;
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-user-select: none; user-select: none;
+  overscroll-behavior: none;
+}
+.app {
+  min-height: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding-inline: 16px;
+  padding-block: calc(env(safe-area-inset-top, 0px) + 14px) calc(env(safe-area-inset-bottom, 0px) + 16px);
+  display: flex; flex-direction: column; gap: 14px;
+}
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+h1 {
+  margin: 0; font-family: var(--font-display); font-weight: 800;
+  font-size: clamp(1.7rem, 7vw, 2.3rem); line-height: 1; letter-spacing: -.01em;
+}
+h1 span { color: var(--red); } h1 span + span { color: var(--blue); } h1 span + span + span { color: var(--sun-deep); }
+.icon-btn {
+  width: 48px; height: 48px; border-radius: 50%;
+  border: 3px solid var(--line); background: var(--mat); color: var(--ink);
+  font: 800 1.2rem var(--font-body); cursor: pointer; display: grid; place-items: center;
+}
+.icon-btn svg { width: 24px; height: 24px; }
+.icon-btn .mute, .icon-btn.muted .wave { display: none; }
+.icon-btn.muted .mute { display: inline; }
+.icon-btn.muted { color: var(--ink-soft); }
+
+/* Play mat */
+.mat {
+  flex: 1; min-height: 260px;
+  background: var(--mat);
+  border: 4px solid var(--line);
+  border-radius: 28px;
+  box-shadow: 0 6px 0 var(--line);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  padding: 20px 12px;
+}
+.tray {
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: clamp(14px, 4vw, 26px);
+}
+.result {
+  min-height: 2.6em; text-align: center;
+  font-family: var(--font-display); font-weight: 800; font-size: clamp(1.15rem, 5vw, 1.5rem);
+  line-height: 1.3; text-wrap: balance;
+}
+.result small { display: block; font-family: var(--font-body); font-weight: 600; font-size: .8rem; color: var(--ink-soft); }
+
+/* Dice */
+.die {
+  --c: var(--red); --cd: var(--red-deep);
+  width: clamp(92px, 26vw, 118px); aspect-ratio: 1; max-width: 100%;
+  border: 0; padding: 0; cursor: pointer;
+  border-radius: 24%;
+  background: linear-gradient(155deg, color-mix(in srgb, var(--c) 82%, #fff) 0%, var(--c) 55%);
+  box-shadow: inset 0 -7px 0 var(--cd), 0 8px 0 var(--cd), 0 14px 18px var(--shadow);
+  display: grid; place-items: center;
+  position: relative;
+  transition: transform .15s;
+  font-family: var(--font-display); color: #fff;
+}
+.die:active { transform: translateY(3px) scale(.97); }
+.die:focus-visible { outline: 4px solid var(--ink); outline-offset: 5px; }
+.die[data-kind="num2"] { --c: var(--blue); --cd: var(--blue-deep); }
+.die[data-kind="letter"] { --c: var(--sun); --cd: var(--sun-deep); color: var(--die-ink); }
+.die[data-kind="wld"] { --c: var(--leaf); --cd: var(--leaf-deep); }
+.die[data-kind="wld"][data-face="Lose"] { --c: var(--red); --cd: var(--red-deep); }
+.die[data-kind="wld"][data-face="Draw"] { --c: var(--grape); --cd: var(--grape-deep); }
+.die[data-kind="wld"] { width: clamp(118px, 34vw, 150px); aspect-ratio: 1.25; border-radius: 22%; }
+
+.pips {
+  width: 72%; height: 72%;
+  display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+}
+.pip { width: 72%; aspect-ratio: 1; margin: auto; border-radius: 50%; background: var(--pip); box-shadow: inset 0 -3px 0 rgba(0,0,0,.18); }
+.big-letter { font-size: clamp(3.4rem, 15vw, 4.6rem); font-weight: 800; line-height: 1; margin-top: .08em; }
+.word { font-size: clamp(1.6rem, 7.5vw, 2.1rem); font-weight: 800; line-height: 1; text-shadow: 0 2px 0 rgba(0,0,0,.18); }
+.word .em { display: block; font-size: 1.2em; margin-bottom: 4px; text-shadow: none; }
+
+.die.rolling { animation: tumble .75s cubic-bezier(.3,.7,.4,1) both; }
+@keyframes tumble {
+  0%   { transform: translateY(0) rotate(0) scale(1); }
+  20%  { transform: translateY(-46px) rotate(-120deg) scale(1.08); }
+  45%  { transform: translateY(0) rotate(-250deg) scale(.95); }
+  65%  { transform: translateY(-16px) rotate(-320deg) scale(1.03); }
+  85%  { transform: translateY(0) rotate(-355deg) scale(.99); }
+  100% { transform: translateY(0) rotate(-360deg) scale(1); }
+}
+.die.landed { animation: pop .3s ease-out; }
+@keyframes pop { 50% { transform: scale(1.1); } }
+
+/* Pickers */
+.pickers { display: flex; flex-direction: column; gap: 10px; }
+.pick-label { font: 800 .78rem var(--font-body); text-transform: uppercase; letter-spacing: .08em; color: var(--ink-soft); }
+.row { display: flex; flex-wrap: wrap; gap: 10px; }
+.chip {
+  flex: 1 1 0; min-width: 0; min-height: 56px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 8px 10px;
+  border-radius: 18px; border: 3px solid var(--line);
+  background: var(--mat); color: var(--ink);
+  font: 800 1rem var(--font-body); cursor: pointer;
+  box-shadow: 0 4px 0 var(--line);
+  transition: transform .1s, background .15s, border-color .15s;
+}
+.chip:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--line); }
+.chip:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
+.chip .sw { width: 22px; height: 22px; border-radius: 7px; flex: none; background: var(--c); box-shadow: inset 0 -3px 0 var(--cd); display: grid; place-items: center; font: 800 .8rem var(--font-display); color: #fff; }
+.chip[aria-pressed="false"] { color: var(--ink-soft); background: var(--sky); }
+.chip[aria-pressed="false"] .sw { filter: grayscale(1); }
+.chip[aria-pressed="true"] { border-color: var(--c); box-shadow: 0 4px 0 var(--cd); }
+.chip.c-red { --c: var(--red); --cd: var(--red-deep); }
+.chip.c-blue { --c: var(--blue); --cd: var(--blue-deep); }
+.chip.c-sun { --c: var(--sun); --cd: var(--sun-deep); }
+.chip.c-sun .sw { color: var(--die-ink); }
+.chip.c-leaf { --c: var(--leaf); --cd: var(--leaf-deep); }
+
+/* Roll */
+.roll {
+  min-height: 76px; border: 0; border-radius: 26px; cursor: pointer;
+  background: var(--go); color: #fff;
+  font: 800 clamp(1.8rem, 8vw, 2.3rem) var(--font-display); letter-spacing: .02em;
+  box-shadow: 0 8px 0 var(--go-deep), 0 14px 22px var(--shadow);
+  transition: transform .08s, box-shadow .08s;
+}
+.roll:active { transform: translateY(6px); box-shadow: 0 2px 0 var(--go-deep), 0 4px 8px var(--shadow); }
+.roll:focus-visible { outline: 4px solid var(--ink); outline-offset: 4px; }
+.hint { text-align: center; font-size: .82rem; color: var(--ink-soft); margin: -4px 0 0; }
+
+.tray.solo .die { width: clamp(130px, 40vw, 170px); border-radius: 26%; }
+.tray.solo .die[data-kind="wld"] { width: clamp(170px, 52vw, 220px); }
+.tray.solo .big-letter { font-size: clamp(5rem, 22vw, 6.6rem); }
+.tray.solo .word { font-size: clamp(2.2rem, 10vw, 2.9rem); }
+@media (max-height: 640px) {
+  .mat { min-height: 210px; padding-block: 12px; }
+  .die { width: clamp(80px, 22vw, 100px); }
+  .roll { min-height: 64px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .die.rolling, .die.landed { animation: none; }
+}
+</style>
+</head>
+<body>
+<main class="app">
+  <header>
+    <h1><span>Roll</span>-<span>a</span>-<span>Roo</span></h1>
+    <button class="icon-btn" id="sound-btn" type="button" aria-pressed="true" aria-label="Sound on">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path class="wave" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/><path class="mute" d="M16 9l6 6M22 9l-6 6"/></svg>
+    </button>
+  </header>
+
+  <section class="mat" aria-label="Dice">
+    <div class="tray" id="tray"></div>
+    <p class="result" id="result" aria-live="polite"></p>
+  </section>
+
+  <section class="pickers" aria-label="Choose your dice">
+    <div class="pick-label" id="pick-label">Pick your dice</div>
+    <div class="row" role="radiogroup" aria-labelledby="pick-label">
+      <button class="chip c-red" type="button" role="radio" id="pick-one" data-mode="one"><span class="sw">1</span>One die</button>
+      <button class="chip c-blue" type="button" role="radio" id="pick-two" data-mode="two"><span class="sw">2</span>Two dice</button>
+    </div>
+    <div class="row" role="presentation">
+      <button class="chip c-sun" type="button" role="radio" id="pick-letter" data-mode="letter"><span class="sw">A</span>A to F</button>
+      <button class="chip c-leaf" type="button" role="radio" id="pick-wld" data-mode="wld"><span class="sw">★</span>Win Lose Draw</button>
+    </div>
+  </section>
+
+  <button class="roll" id="roll" type="button">ROLL!</button>
+  <p class="hint">You can also tap the dice, or shake your phone, to roll.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var LETTERS = ["A", "B", "C", "D", "E", "F"];
+  var WLD = ["Win", "Win", "Lose", "Lose", "Draw", "Draw"]; // 2 of each, so each is a 1 in 3 chance
+  var WLD_EMOJI = { Win: "🏆", Lose: "💥", Draw: "🤝" };
+  // Which of the 9 grid cells (0-8, reading order) light up for each number
+  var PIPS = { 1: [4], 2: [2, 6], 3: [2, 4, 6], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+
+  var store = {
+    get: function (k, d) { try { var v = localStorage.getItem("dice." + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set: function (k, v) { try { localStorage.setItem("dice." + k, JSON.stringify(v)); } catch (e) {} }
+  };
+
+  var state = {
+    mode: store.get("mode", "two"), // one | two | letter | wld: only one kind of dice at a time
+    sound: store.get("sound", true),
+    faces: { num1: 5, num2: 2, letter: "C", wld: "Win" }, // example faces on first open
+    rolling: false
+  };
+
+  var tray = document.getElementById("tray");
+  var result = document.getElementById("result");
+  var rollBtn = document.getElementById("roll");
+  var soundBtn = document.getElementById("sound-btn");
+  var reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function rand(n) {
+    if (window.crypto && crypto.getRandomValues) {
+      var a = new Uint32Array(1), lim = Math.floor(4294967296 / n) * n;
+      do { crypto.getRandomValues(a); } while (a[0] >= lim);
+      return a[0] % n;
+    }
+    return Math.floor(Math.random() * n);
+  }
+  function randomFace(kind) {
+    if (kind === "letter") return LETTERS[rand(6)];
+    if (kind === "wld") return WLD[rand(6)];
+    return rand(6) + 1;
+  }
+
+  function activeKinds() {
+    return { one: ["num1"], two: ["num1", "num2"], letter: ["letter"], wld: ["wld"] }[state.mode] || ["num1", "num2"];
+  }
+
+  function faceLabel(kind, face) {
+    if (kind === "letter") return "Letter " + face;
+    if (kind === "wld") return face;
+    return String(face);
+  }
+
+  function paintFace(el, kind, face) {
+    el.dataset.face = face;
+    el.setAttribute("aria-label", faceLabel(kind, face) + ". Tap to roll this die.");
+    if (kind === "letter") {
+      el.innerHTML = '<span class="big-letter">' + face + "</span>";
+    } else if (kind === "wld") {
+      el.innerHTML = '<span class="word"><span class="em" aria-hidden="true">' + WLD_EMOJI[face] + "</span>" + face + "</span>";
+    } else {
+      var cells = "";
+      for (var i = 0; i < 9; i++) cells += PIPS[face].indexOf(i) > -1 ? '<span class="pip"></span>' : "<span></span>";
+      el.innerHTML = '<span class="pips" aria-hidden="true">' + cells + "</span>";
+    }
+  }
+
+  function buildTray() {
+    tray.innerHTML = "";
+    tray.classList.toggle("solo", state.mode !== "two");
+    activeKinds().forEach(function (kind) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "die";
+      b.dataset.kind = kind;
+      paintFace(b, kind, state.faces[kind]);
+      b.addEventListener("click", function () { roll([kind]); });
+      tray.appendChild(b);
+    });
+    showResult();
+  }
+
+  function showResult() {
+    var f = state.faces, text;
+    if (state.mode === "two") text = f.num1 + " + " + f.num2 + " = " + (f.num1 + f.num2) + (f.num1 === f.num2 ? " Doubles!" : "");
+    else if (state.mode === "letter") text = "Letter " + f.letter;
+    else if (state.mode === "wld") text = f.wld === "Win" ? "You win! 🎉" : f.wld === "Lose" ? "Oh no, you lose!" : "It's a draw!";
+    else text = "You rolled " + f.num1;
+    result.textContent = text;
+  }
+
+  /* ---------- Sound: little wooden clacks made with Web Audio ---------- */
+  var ctx = null;
+  // iPhones: play through the speaker even when the ring/silent switch is on (iOS 17+)
+  try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+  function getCtx() {
+    try {
+      if (!ctx) { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; ctx = new AC(); }
+      if (ctx.state !== "running" && ctx.resume) ctx.resume();
+      return ctx;
+    } catch (e) { return null; }
+  }
+  function audio() { return state.sound ? getCtx() : null; }
+  // Phones only allow sound after a touch, so wake the audio up (with a silent blip) on every touch
+  function unlockAudio() {
+    var a = getCtx(); if (!a) return;
+    try {
+      var src = a.createBufferSource();
+      src.buffer = a.createBuffer(1, 1, 22050);
+      src.connect(a.destination); src.start(0);
+    } catch (e) {}
+  }
+  ["pointerdown", "touchend", "click", "keydown"].forEach(function (ev) {
+    document.addEventListener(ev, unlockAudio, { capture: true, passive: true });
+  });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) getCtx(); });
+  function clack(when, pitch) {
+    var a = audio(); if (!a) return;
+    var t = a.currentTime + when;
+    var o = a.createOscillator(), g = a.createGain();
+    o.type = "triangle";
+    o.frequency.setValueAtTime(pitch, t);
+    o.frequency.exponentialRampToValueAtTime(pitch * .5, t + .06);
+    g.gain.setValueAtTime(.0001, t);
+    g.gain.exponentialRampToValueAtTime(.35, t + .005);
+    g.gain.exponentialRampToValueAtTime(.0001, t + .09);
+    o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + .1);
+  }
+  function chime(win) {
+    var a = audio(); if (!a) return;
+    var notes = win ? [523, 659, 784, 1047] : [392, 330];
+    notes.forEach(function (f, i) {
+      var t = a.currentTime + .05 + i * .09, o = a.createOscillator(), g = a.createGain();
+      o.type = "sine"; o.frequency.value = f;
+      g.gain.setValueAtTime(.0001, t);
+      g.gain.exponentialRampToValueAtTime(.22, t + .01);
+      g.gain.exponentialRampToValueAtTime(.0001, t + .25);
+      o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + .3);
+    });
+  }
+
+  /* ---------- Rolling ---------- */
+  function roll(kinds) {
+    if (state.rolling) return;
+    kinds = kinds || activeKinds();
+    state.rolling = true;
+    result.textContent = "Rolling…";
+    if (navigator.vibrate) { try { navigator.vibrate(30); } catch (e) {} }
+
+    var dur = reduceMotion ? 150 : 750;
+    var els = kinds.map(function (k) { return tray.querySelector('[data-kind="' + k + '"]'); }).filter(Boolean);
+
+    els.forEach(function (el, i) {
+      el.classList.remove("landed", "rolling");
+      void el.offsetWidth; // restart the animation
+      el.style.animationDelay = (i * 60) + "ms";
+      if (!reduceMotion) el.classList.add("rolling");
+    });
+    for (var c = 0; c < 6; c++) clack(c * .11 + Math.random() * .03, 900 + Math.random() * 500);
+
+    // flicker random faces while tumbling
+    var flicker = setInterval(function () {
+      els.forEach(function (el) { paintFace(el, el.dataset.kind, randomFace(el.dataset.kind)); });
+    }, 85);
+
+    setTimeout(function () {
+      clearInterval(flicker);
+      els.forEach(function (el) {
+        var k = el.dataset.kind, f = randomFace(k);
+        state.faces[k] = f;
+        paintFace(el, k, f);
+        el.classList.remove("rolling");
+        el.style.animationDelay = "";
+        if (!reduceMotion) el.classList.add("landed");
+      });
+      showResult();
+      if (kinds.indexOf("wld") > -1) chime(state.faces.wld === "Win");
+      else clack(0, 600);
+      state.rolling = false;
+    }, dur + (els.length - 1) * 60);
+  }
+
+  /* ---------- Pickers ---------- */
+  var picks = Array.prototype.slice.call(document.querySelectorAll("[data-mode]"));
+
+  function syncPickers() {
+    picks.forEach(function (b) {
+      var on = b.dataset.mode === state.mode;
+      b.setAttribute("aria-pressed", String(on));
+      b.setAttribute("aria-checked", String(on));
+    });
+    soundBtn.setAttribute("aria-pressed", String(state.sound));
+    soundBtn.setAttribute("aria-label", state.sound ? "Sound on" : "Sound off");
+    soundBtn.classList.toggle("muted", !state.sound);
+  }
+
+  picks.forEach(function (b) {
+    b.addEventListener("click", function () {
+      if (state.rolling) return;
+      state.mode = b.dataset.mode;
+      store.set("mode", state.mode);
+      syncPickers(); buildTray();
+    });
+  });
+  soundBtn.addEventListener("click", function () {
+    state.sound = !state.sound;
+    store.set("sound", state.sound);
+    syncPickers();
+    if (state.sound) clack(0, 900);
+  });
+  rollBtn.addEventListener("click", function () { roll(); });
+  document.addEventListener("keydown", function (e) {
+    if ((e.key === " " || e.key === "Enter") && e.target === document.body) { e.preventDefault(); roll(); }
+  });
+
+  /* ---------- Shake to roll (Android; iOS asks for permission on first Roll tap) ---------- */
+  var lastShake = 0, motionAsked = false;
+  function onMotion(e) {
+    var a = e.accelerationIncludingGravity; if (!a) return;
+    var force = Math.abs(a.x || 0) + Math.abs(a.y || 0) + Math.abs(a.z || 0);
+    var now = Date.now();
+    if (force > 38 && now - lastShake > 1200) { lastShake = now; roll(); }
+  }
+  function enableMotion() {
+    if (motionAsked) return; motionAsked = true;
+    try {
+      if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === "function") {
+        DeviceMotionEvent.requestPermission().then(function (s) { if (s === "granted") addEventListener("devicemotion", onMotion); }).catch(function () {});
+      } else if (window.DeviceMotionEvent) {
+        addEventListener("devicemotion", onMotion);
+      }
+    } catch (e) {}
+  }
+  rollBtn.addEventListener("click", enableMotion, { once: true });
+
+  syncPickers();
+  buildTray();
+
+  /* ---------- Offline support ---------- */
+  if ("serviceWorker" in navigator && location.protocol !== "file:") {
+    window.addEventListener("load", function () {
+      try { navigator.serviceWorker.register("sw.js").catch(function () {}); } catch (e) {}
+    });
+  }
+})();
+</script>
+</body>
+</html>
