@@ -1,6 +1,6 @@
 // Offline support: cache the app shell on install, then serve from cache first.
 // Bump VERSION whenever you change any file so phones pick up the update.
-const VERSION = "dice-v3";
+const VERSION = "dice-v4";
 const SHELL = [
   "./",
   "index.html",
