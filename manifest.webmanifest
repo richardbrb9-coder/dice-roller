@@ -2,6 +2,7 @@
   "name": "Roll-a-Roo Dice",
   "short_name": "Dice",
   "description": "A kid-friendly dice roller with number dice, an A to F letter die and a Win / Lose / Draw die.",
+  "id": "/dice-roller/",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
