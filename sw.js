@@ -1,6 +1,6 @@
 // Offline support: cache the app shell on install, then serve from cache first.
 // Bump VERSION whenever you change any file so phones pick up the update.
-const VERSION = "dice-v4";
+const VERSION = "dice-v5";
 const PREFIX = "dice-v"; // Only delete this app's own old caches: every app on richardbrb9-coder.github.io shares the same cache storage
 const SHELL = [
   "./",

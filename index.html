@@ -188,6 +188,15 @@ h1 span { color: var(--red); } h1 span + span { color: var(--blue); } h1 span + 
 .roll:active { transform: translateY(6px); box-shadow: 0 2px 0 var(--go-deep), 0 4px 8px var(--shadow); }
 .roll:focus-visible { outline: 4px solid var(--ink); outline-offset: 4px; }
 .hint { text-align: center; font-size: .82rem; color: var(--ink-soft); margin: -4px 0 0; }
+.shake-btn {
+  align-self: center; min-height: 44px; padding: 6px 16px;
+  border-radius: 999px; border: 3px solid var(--line);
+  background: var(--sky); color: var(--ink-soft);
+  font: 800 .9rem var(--font-body); cursor: pointer;
+}
+.shake-btn[aria-pressed="true"] { background: var(--mat); color: var(--ink); border-color: var(--go); }
+.shake-btn:focus-visible { outline: 3px solid var(--go); outline-offset: 3px; }
+.shake-btn[hidden] { display: none; }
 
 .tray.solo .die { width: clamp(130px, 40vw, 170px); border-radius: 26%; }
 .tray.solo .die[data-kind="wld"] { width: clamp(170px, 52vw, 220px); }
@@ -274,7 +283,8 @@ h1 span { color: var(--red); } h1 span + span { color: var(--blue); } h1 span + 
   </section>
 
   <button class="roll" id="roll" type="button">ROLL!</button>
-  <p class="hint">You can also tap the dice, or shake your phone, to roll.</p>
+  <p class="hint">You can also tap the dice to roll.</p>
+  <button class="shake-btn" id="shake-btn" type="button" aria-pressed="false" hidden>📳 Enable shake</button>
 </main>
 
 <script>
@@ -491,25 +501,51 @@ h1 span { color: var(--red); } h1 span + span { color: var(--blue); } h1 span + 
     if ((e.key === " " || e.key === "Enter") && e.target === document.body) { e.preventDefault(); roll(); }
   });
 
-  /* ---------- Shake to roll (Android; iOS asks for permission on first Roll tap) ---------- */
-  var lastShake = 0, motionAsked = false;
+  /* ---------- Shake to roll ----------
+     iOS only allows asking for motion access from a tap, and forgets the answer each
+     time the app opens, so we never ask on our own: only the Enable shake button asks. */
+  var shakeBtn = document.getElementById("shake-btn");
+  var needsAsk = !!(window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === "function");
+  var lastShake = 0, listening = false, motionSeen = false;
+  // Saved choice; first time, shake is on where no permission is needed (Android) and off on iOS
+  state.shake = store.get("shake", !needsAsk);
   function onMotion(e) {
-    var a = e.accelerationIncludingGravity; if (!a) return;
+    var a = e.accelerationIncludingGravity; if (!a || a.x == null) return; // desktops send empty events
+    if (!motionSeen) { motionSeen = true; shakeBtn.hidden = false; syncShake(); }
+    if (!state.shake) return;
     var force = Math.abs(a.x || 0) + Math.abs(a.y || 0) + Math.abs(a.z || 0);
     var now = Date.now();
     if (force > 38 && now - lastShake > 1200) { lastShake = now; roll(); }
   }
-  function enableMotion() {
-    if (motionAsked) return; motionAsked = true;
-    try {
-      if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === "function") {
-        DeviceMotionEvent.requestPermission().then(function (s) { if (s === "granted") addEventListener("devicemotion", onMotion); }).catch(function () {});
-      } else if (window.DeviceMotionEvent) {
-        addEventListener("devicemotion", onMotion);
-      }
-    } catch (e) {}
+  function listen() {
+    if (listening) return; listening = true;
+    addEventListener("devicemotion", onMotion);
+    syncShake();
   }
-  rollBtn.addEventListener("click", enableMotion, { once: true });
+  function syncShake() {
+    // On iOS a saved "on" only works once access is granted for this launch
+    var active = state.shake && listening && (!needsAsk || motionSeen);
+    shakeBtn.setAttribute("aria-pressed", active ? "true" : "false");
+    shakeBtn.textContent = active ? "📳 Shake to roll: On" : (state.shake && needsAsk ? "📳 Tap to turn on shake" : "📳 Enable shake");
+  }
+  if (window.DeviceMotionEvent) {
+    // On iOS show the button straight away; elsewhere only once the device reports motion (so not on desktops)
+    shakeBtn.hidden = !needsAsk;
+    // If access is already granted, motion events arrive straight away with no prompt
+    listen();
+    shakeBtn.addEventListener("click", function () {
+      var active = shakeBtn.getAttribute("aria-pressed") === "true";
+      if (active) { state.shake = false; store.set("shake", false); syncShake(); return; }
+      state.shake = true; store.set("shake", true);
+      if (!needsAsk) { syncShake(); return; }
+      try {
+        DeviceMotionEvent.requestPermission().then(function (s) {
+          if (s === "granted") { motionSeen = true; } else { state.shake = false; store.set("shake", false); }
+          syncShake();
+        }).catch(function () { syncShake(); });
+      } catch (e) { syncShake(); }
+    });
+  }
 
   syncPickers();
   buildTray();
